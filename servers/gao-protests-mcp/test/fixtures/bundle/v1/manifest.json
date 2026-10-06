@@ -1,0 +1,124 @@
+{
+  "schema": 1,
+  "data_version": "v1",
+  "built_at": "2026-01-01T00:00:00+00:00",
+  "records": 36,
+  "lookup_keys": 37,
+  "synopsis_objects": 31,
+  "coverage": {
+    "reranked_neighbors": 30,
+    "cosine_neighbors": 36,
+    "core_issue": 30,
+    "synopsis": {
+      "total": 30,
+      "v1": 12,
+      "v2": 18
+    }
+  },
+  "vectors": {
+    "file": "vectors.bin",
+    "count": 36,
+    "dims": 768,
+    "bytes": 30736,
+    "quantization": "int8, symmetric per-dimension scale",
+    "embedding_model": "BAAI/bge-base-en-v1.5",
+    "pooling": "mean",
+    "quantization_check": {
+      "sample": 10,
+      "overlap_at_10": 1.0,
+      "overlap_at_20": 1.0,
+      "max_abs_error": 0.00062
+    }
+  },
+  "years": {
+    "min": 1979,
+    "max": 2025,
+    "unknown": 5
+  },
+  "outcomes": {
+    "denied": 18,
+    "sustained": 8,
+    "dismissed": 7,
+    "unknown": 2,
+    "sustained in part": 1
+  },
+  "record_types": {
+    "decision": 33,
+    "advisory_opinion": 1,
+    "letter": 1,
+    "reconsideration": 1
+  },
+  "vehicles": {
+    "idiq": 8,
+    "torp": 0,
+    "bpa": 0,
+    "fss": 0,
+    "set-aside": 8,
+    "sole-source": 4,
+    "task-order": 5,
+    "delivery-order": 8,
+    "call-order": 0
+  },
+  "top_agencies": [
+    [
+      "Department of the Navy",
+      5
+    ],
+    [
+      "Department of the Army",
+      3
+    ],
+    [
+      "Department of the Air Force",
+      3
+    ],
+    [
+      "Department of Veterans Affairs",
+      3
+    ],
+    [
+      "General Services Administration",
+      3
+    ],
+    [
+      "Department of Energy",
+      3
+    ],
+    [
+      "Centers for Medicare & Medicaid Services",
+      2
+    ],
+    [
+      "Department of Homeland Security",
+      2
+    ],
+    [
+      "Department of Defense",
+      2
+    ],
+    [
+      "Department of Transportation",
+      2
+    ],
+    [
+      "Department of Commerce",
+      2
+    ],
+    [
+      "Department of the Interior",
+      1
+    ]
+  ],
+  "sources": [
+    "analysis_by_bnumber.json",
+    "corpus_doc_vectors.npz",
+    "neighbors_top20.json",
+    "neighbors_top5_v2.json",
+    "rerank_issue.json",
+    "similar_by_bnumber.jsonl",
+    "similar_by_bnumber_v2.json"
+  ],
+  "warnings": {
+    "analysis key whose record is not in the vector row order": 1
+  }
+}

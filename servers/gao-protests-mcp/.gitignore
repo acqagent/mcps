@@ -1,0 +1,7 @@
+node_modules/
+/dist/
+.wrangler/
+.dev.vars*
+/bundle/
+__pycache__/
+.pytest_cache/

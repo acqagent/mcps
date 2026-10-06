@@ -1,0 +1,22 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "gao-protests-mcp",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-30",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Bundle written by scripts/build_bundle.py, uploaded to the bucket root.
+  "r2_buckets": [{ "binding": "GAO_DATA", "bucket_name": "gao-protests" }],
+
+  // Embeds free-text queries for search_decisions (@cf/baai/bge-base-en-v1.5, mean pooling).
+  "ai": { "binding": "AI" },
+
+  "vars": {
+    // R2 key prefix of the bundle to serve; matches build_bundle.py --data-version.
+    "DATA_VERSION": "v1"
+  },
+
+  // Optional: `wrangler secret put MCP_AUTH_TOKEN` to require a bearer token on /mcp.
+
+  "observability": { "enabled": true }
+}
