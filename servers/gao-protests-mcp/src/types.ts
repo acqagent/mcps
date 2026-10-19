@@ -7,6 +7,10 @@ export interface Env {
   DATA_VERSION?: string;
   /** When set, /mcp requires "Authorization: Bearer <token>" (or ?key=<token>). */
   MCP_AUTH_TOKEN?: string;
+  /** Per-client-IP request limit on /mcp ("ratelimits" in wrangler.jsonc). Unset: no limit. */
+  MCP_RATE_LIMITER?: RateLimit;
+  /** Served as plain text at /.well-known/openai-apps-challenge to verify the domain with OpenAI. */
+  OPENAI_APPS_CHALLENGE?: string;
 }
 
 /** [b_number, cosine similarity, date, outcome_assessed] */

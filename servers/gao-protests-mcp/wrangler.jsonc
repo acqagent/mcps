@@ -16,7 +16,15 @@
     "DATA_VERSION": "v1"
   },
 
+  // Per-client-IP limit on /mcp; requests over it get HTTP 429. period is 10 or 60 seconds, and
+  // namespace_id is any number unique within your Cloudflare account. Remove it for no limit.
+  "ratelimits": [{ "name": "MCP_RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 120, "period": 60 } }],
+
   // Optional: `wrangler secret put MCP_AUTH_TOKEN` to require a bearer token on /mcp.
+  // Optional: `wrangler secret put OPENAI_APPS_CHALLENGE` to verify the domain for OpenAI's plugin directory.
+
+  // Keep the workers.dev URL when deploying with --domain (custom domains turn it off by default).
+  "workers_dev": true,
 
   "observability": { "enabled": true }
 }

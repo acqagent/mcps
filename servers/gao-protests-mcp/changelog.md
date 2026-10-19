@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.0
+
+- Rate limit: `/mcp` allows 120 requests a minute per client IP (per /64 for IPv6) through a
+  Workers rate limiting binding (`MCP_RATE_LIMITER`), and answers HTTP 429 with `Retry-After`
+  over the limit. The binding is approximate, so treat it as a backstop. Without the binding
+  nothing is limited.
+- `/.well-known/openai-apps-challenge` serves the `OPENAI_APPS_CHALLENGE` secret as plain text,
+  for domain verification in OpenAI's plugin directory. Unset, it returns 404.
+- `workers_dev` is set explicitly so deploying with `--domain` keeps the workers.dev URL, and
+  `npm run deploy:acqagent` deploys the hosted copy to `mcp.acqagent.ai`.
+
 ## 1.0.0
 
 Initial release. A stateless remote MCP server on Cloudflare Workers that serves the GAO bid

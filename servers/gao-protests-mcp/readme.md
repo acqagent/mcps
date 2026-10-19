@@ -143,8 +143,50 @@ npx wrangler secret put MCP_AUTH_TOKEN
 
 Clients then send `Authorization: Bearer <token>`. Clients that cannot set headers can append
 `?key=<token>` to the URL instead; the token then appears in URLs and request logs, so prefer
-the header. `/health` stays open. For a public endpoint, consider a Cloudflare rate limiting
-rule on `/mcp`.
+the header. `/health` stays open.
+
+### 6. Rate limit
+
+`wrangler.jsonc` binds a [Workers rate limiter](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)
+that allows 120 requests a minute to `/mcp` from each client IP address (each /64 network for
+IPv6). Requests over the limit get HTTP 429 with `Retry-After: 60`. Change `limit` (and `period`,
+10 or 60 seconds) to suit, or delete the `ratelimits` entry to turn it off.
+
+The limiter is a backstop, not an exact cap. Cloudflare keeps the counts per location and syncs
+them in the background, so traffic can run well past the limit before it trips. In one test, a
+single client sending about 16 requests a second for 90 seconds got 429 on only a handful of
+requests. For a hard cap, add a rate limiting rule in the zone's WAF on top of it.
+
+Clients that call from a shared service, such as ChatGPT, reach the server from a few addresses
+that many users share, so leave room above one person's usage.
+
+### 7. Custom domain (optional)
+
+If the domain's zone is on the same Cloudflare account, deploy with `--domain` and Cloudflare
+creates the DNS record and TLS certificate:
+
+```bash
+npx wrangler deploy --domain mcp.example.com
+```
+
+Later deploys leave the domain attached. `workers_dev` is `true` in `wrangler.jsonc`, so the
+workers.dev URL keeps working too. Zone security settings apply to the custom domain: Bot Fight
+Mode on the Free plan challenges every non-browser request, so MCP clients can't connect until it
+is off. `npm run deploy:acqagent` is the deploy for the hosted copy at `mcp.acqagent.ai`.
+
+### 8. OpenAI plugin directory (optional)
+
+OpenAI verifies that you control the MCP server's domain by fetching a token from
+`/.well-known/openai-apps-challenge`. Copy the token from the submission portal, then:
+
+```bash
+npx wrangler secret put OPENAI_APPS_CHALLENGE
+```
+
+The Worker serves it as plain text; without the secret that path returns 404. The directory
+accepts servers with no authentication or OAuth, not bearer tokens, so delete `MCP_AUTH_TOKEN`
+(`npx wrangler secret delete MCP_AUTH_TOKEN`) before connecting the server in the portal. The
+package for the hosted copy's listing is in [`openai-plugin/`](openai-plugin/readme.md).
 
 ## Connect a client
 

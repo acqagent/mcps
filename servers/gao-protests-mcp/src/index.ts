@@ -7,6 +7,7 @@ import type { Env } from "./types";
 import { VERSION } from "./version";
 
 const MCP_PATH = "/mcp";
+const OPENAI_CHALLENGE_PATH = "/.well-known/openai-apps-challenge";
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -46,6 +47,29 @@ function authorized(request: Request, url: URL, token: string | undefined): bool
   return presented.length > 0 && safeEqual(presented, token);
 }
 
+/** The client's IP address, with IPv6 cut to its /64: one client usually holds a whole /64. */
+export function rateLimitKey(ip: string | null): string {
+  if (!ip) return "unknown";
+  if (!ip.includes(":")) return ip;
+  const [head, tail] = ip.split("::");
+  const left = head ? head.split(":") : [];
+  const right = tail ? tail.split(":") : [];
+  const groups = tail === undefined ? left : [...left, ...Array(8 - left.length - right.length).fill("0"), ...right];
+  return `${groups.slice(0, 4).join(":")}::/64`;
+}
+
+/** Checks the per-client limit. Without the binding, or if the limiter fails, the request goes through. */
+async function withinRateLimit(request: Request, env: Env): Promise<boolean> {
+  if (!env.MCP_RATE_LIMITER) return true;
+  try {
+    const key = rateLimitKey(request.headers.get("CF-Connecting-IP"));
+    return (await env.MCP_RATE_LIMITER.limit({ key })).success;
+  } catch (err) {
+    console.error("rate limiter failed", err);
+    return true;
+  }
+}
+
 async function handleMcp(request: Request, env: Env): Promise<Response> {
   if (request.method !== "POST") {
     return json(
@@ -80,12 +104,26 @@ async function handleHealth(env: Env): Promise<Response> {
   }
 }
 
+/** OpenAI's domain verification expects the token alone, as plain text. */
+function handleOpenAiChallenge(env: Env): Response {
+  const token = env.OPENAI_APPS_CHALLENGE?.trim();
+  if (!token) return json({ error: "Not found" }, 404);
+  return new Response(token, { headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" } });
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS_HEADERS });
 
     if (url.pathname === MCP_PATH) {
+      if (!(await withinRateLimit(request, env))) {
+        return json(
+          { jsonrpc: "2.0", error: { code: -32029, message: "Too many requests. Wait a minute and try again." }, id: null },
+          429,
+          { "Retry-After": "60" },
+        );
+      }
       if (!authorized(request, url, env.MCP_AUTH_TOKEN)) {
         return json(
           { jsonrpc: "2.0", error: { code: -32001, message: "Unauthorized" }, id: null },
@@ -96,6 +134,7 @@ export default {
       return handleMcp(request, env);
     }
     if (url.pathname === "/health") return handleHealth(env);
+    if (url.pathname === OPENAI_CHALLENGE_PATH) return handleOpenAiChallenge(env);
     if (url.pathname === "/") {
       return json({
         name: "gao-protests-mcp",

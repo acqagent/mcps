@@ -1,0 +1,14 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "gao-protests": {
+      "type": "streamable-http",
+      "url": "https://mcp.acqagent.ai/mcp",
+      "extensions": {
+        "com.openai": {
+          "auth": { "type": "none" }
+        }
+      }
+    }
+  }
+}
