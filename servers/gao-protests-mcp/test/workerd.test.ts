@@ -72,24 +72,29 @@ beforeAll(async () => {
     stdio: "pipe",
   });
   const config = readWranglerConfig();
+  const script = readFileSync(join(outdir, "index.js"), "utf8");
+  // The same bundle twice: "gao-protests-mcp" with a roomy allowance, "limited" with one call a day.
+  const server = (name: string, daily: string) => ({
+    config: {
+      name,
+      compatibilityDate: config.compatibility_date,
+      compatibilityFlags: config.compatibility_flags ?? [],
+      env: {
+        GAO_DATA: { type: "r2", name: "gao-protests" },
+        AI: { type: "worker", worker: "fake-ai" },
+        USAGE: { type: "durable-object", worker: name, exportName: "UsageCounter" },
+        DATA_VERSION: { type: "text", value: "v1" },
+        DAILY_TOOL_CALLS: { type: "text", value: daily },
+        MONTHLY_TOOL_CALLS: { type: "text", value: "300000" },
+      },
+      exports: { UsageCounter: { type: "durable-object", storage: "sqlite" } },
+      manifest: { mainModule: "index.js", modules: { "index.js": { type: "esm", contents: script } } },
+    },
+  }) as const;
   mf = new Miniflare({
     workers: [
-      {
-        config: {
-          name: "gao-protests-mcp",
-          compatibilityDate: config.compatibility_date,
-          compatibilityFlags: config.compatibility_flags ?? [],
-          env: {
-            GAO_DATA: { type: "r2", name: "gao-protests" },
-            AI: { type: "worker", worker: "fake-ai" },
-            DATA_VERSION: { type: "text", value: "v1" },
-          },
-          manifest: {
-            mainModule: "index.js",
-            modules: { "index.js": { type: "esm", contents: readFileSync(join(outdir, "index.js"), "utf8") } },
-          },
-        },
-      },
+      server("gao-protests-mcp", "20000"),
+      server("limited", "1"),
       {
         config: {
           name: "fake-ai",
@@ -148,8 +153,28 @@ describe("production bundle in workerd", () => {
     expect((await tool("corpus_info")).data.decisions).toBe(36);
   });
 
-  it("reports health", async () => {
+  it("reports health, with tool calls counted by the Durable Object", async () => {
     const res = await mf.dispatchFetch("http://localhost/health");
-    expect(await res.json()).toMatchObject({ ok: true, decisions: 36, search: true });
+    const health: any = await res.json();
+    expect(health).toMatchObject({ ok: true, decisions: 36, search: true, off_switch: { armed: false } });
+    expect(health.tool_calls.today).toEqual({ used: 5, limit: 20000 }); // the five tool calls above
+    expect(health.access).toMatchObject({ allowlist: "off", openai_list: "built-in", anthropic_prefixes: 1 });
+    expect(health.access.openai_prefixes).toBeGreaterThan(100);
+  });
+
+  it("stops tool calls past the allowance", async () => {
+    const limited = await mf.getWorker("limited");
+    const call = async () => {
+      const res = await limited.fetch("http://localhost/mcp", {
+        method: "POST",
+        headers: MCP_HEADERS,
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "corpus_info", arguments: {} } }),
+      });
+      return ((await res.json()) as any).result;
+    };
+    expect((await call()).isError).toBeFalsy();
+    const second = await call();
+    expect(second.isError).toBe(true);
+    expect(second.content[0].text).toMatch(/daily allowance/);
   });
 });

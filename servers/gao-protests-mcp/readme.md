@@ -12,7 +12,7 @@ of a `search_decisions` query.
 
 | Tool | What it returns |
 |---|---|
-| `search_decisions(query, limit?, filters...)` | Decisions closest to a plain-language description of an issue or fact pattern. |
+| `search_decisions(query, limit?, filters...)` | Decisions closest to a plain-language description of an issue or fact pattern (up to 500 characters). |
 | `get_decision(b_number)` | One decision's analysis: date, agency, `outcome_assessed`, summary, issues, reasoning, outcome rationale, key points, GAO source URL when known, and its five most similar decisions. |
 | `find_similar_decisions(b_number, limit?, filters..., opposite_outcome?, exclude_same_docket?)` | Closest decisions to a given one. Unfiltered: the LLM re-ranked top 5, then document similarity. Filtered: every decision that passes the filters, ranked by document similarity. |
 | `get_similarity_synopsis(b_number, include_passages?)` | Stored comparison with the five closest matches: shared issues, differences, grounds to distinguish, practical use, matched passages, and FAR/U.S.C./GAO citations found in both decisions. |
@@ -143,7 +143,8 @@ npx wrangler secret put MCP_AUTH_TOKEN
 
 Clients then send `Authorization: Bearer <token>`. Clients that cannot set headers can append
 `?key=<token>` to the URL instead; the token then appears in URLs and request logs, so prefer
-the header. `/health` stays open.
+the header. `/health` stays open. With the allowlist on (step 8), the token is no longer required
+from ChatGPT and Claude; it lets other clients in instead.
 
 ### 6. Rate limit
 
@@ -160,7 +161,70 @@ requests. For a hard cap, add a rate limiting rule in the zone's WAF on top of i
 Clients that call from a shared service, such as ChatGPT, reach the server from a few addresses
 that many users share, so leave room above one person's usage.
 
-### 7. Custom domain (optional)
+### 7. Allowance
+
+`wrangler.jsonc` sets a shared allowance of tool calls for all users together: 20,000 a day and
+300,000 a month (UTC). Past either one, tools answer with a "try again later" message and do no
+searches, embeddings or data reads, until midnight UTC or the 1st of next month. Only tool calls
+count; connecting and listing tools don't. A Durable Object (`UsageCounter`) keeps the count, and
+`/health` shows it under `tool_calls`. Change `DAILY_TOOL_CALLS` and `MONTHLY_TOOL_CALLS` to suit,
+or remove them for no allowance. If the counter fails, calls go through.
+
+### 8. Allowlist (optional)
+
+Set `"ALLOWLIST": "on"` in `wrangler.jsonc` to accept `/mcp` requests only from the servers that
+ChatGPT and Claude call MCP servers from, and refuse everything else with HTTP 403:
+
+| Client | Addresses |
+|---|---|
+| ChatGPT apps and connectors | OpenAI's [`chatgpt-connectors.json`](https://openai.com/chatgpt-connectors.json) |
+| Claude (claude.ai, Desktop, mobile, the API's MCP connector) | Anthropic's [outbound range](https://platform.claude.com/docs/en/api/ip-addresses), `160.79.104.0/21` |
+
+Clients that connect from the user's own computer, such as Claude Code, Codex and other local apps,
+are refused unless they send `MCP_AUTH_TOKEN` (step 5), which works from anywhere.
+
+OpenAI changes its list from time to time, so an hourly trigger downloads it and saves the last good
+copy in the bucket (`access/chatgpt-connectors.json`). A download that fails, or has fewer than 20
+usable ranges, is skipped. Until the first good download, and whenever the saved copy can't be read,
+the Worker uses the copy built into `src/chatgpt-connectors.json`. `/health` shows which list is in
+use and when it was fetched, under `access`. Anthropic's range is built in; update `src/access.ts` if
+Anthropic announces a new one.
+
+An allowlist only shows that a request came through ChatGPT or Claude, not who sent it: any user of
+either can still use the server.
+
+### 9. Off switch (optional)
+
+Cloudflare bills a request that reaches the Worker even when the Worker refuses it, and has no
+spending cap. The off switch closes that gap. Each hour it asks Cloudflare's analytics how many
+requests the Worker has served since the 1st of the month (UTC). Past `OFF_SWITCH_REQUESTS`
+(60 million), it turns on a WAF custom rule that blocks the server's hostname, so later requests
+stop before they reach the Worker. The server then stays off until you disable the rule ("gao-protests-mcp
+off switch") under Security > WAF > Custom rules. The switch doesn't block again in the same month.
+
+It only works on a custom domain (step 10): WAF rules don't apply to workers.dev. To arm it, create
+an API token (My Profile > API Tokens > Create Custom Token) with these permissions only:
+
+- Account > Account Analytics > Read
+- Zone > Zone WAF > Edit, for the domain's zone only
+
+Then set it and the IDs from the zone's Overview page as secrets:
+
+```bash
+npx wrangler secret put OFF_SWITCH_API_TOKEN
+npx wrangler secret put OFF_SWITCH_ACCOUNT_ID
+npx wrangler secret put OFF_SWITCH_ZONE_ID
+npx wrangler secret put OFF_SWITCH_HOST       # the custom domain, for example mcp.example.com
+```
+
+`/health` shows `"armed": true` once all four are set, and the time of the last check. If the token
+leaks, it can only read the account's analytics and change WAF rules on that one zone. The switch adds the rule if
+it isn't there; on the Free plan that needs one of the zone's five custom rules to be free.
+
+The count is filtered by the Worker's name, `gao-protests-mcp` (`WORKER_NAME` in `src/offswitch.ts`);
+change it there if you rename the Worker.
+
+### 10. Custom domain (optional)
 
 If the domain's zone is on the same Cloudflare account, deploy with `--domain` and Cloudflare
 creates the DNS record and TLS certificate:
@@ -169,12 +233,13 @@ creates the DNS record and TLS certificate:
 npx wrangler deploy --domain mcp.example.com
 ```
 
-Later deploys leave the domain attached. `workers_dev` is `true` in `wrangler.jsonc`, so the
-workers.dev URL keeps working too. Zone security settings apply to the custom domain: Bot Fight
-Mode on the Free plan challenges every non-browser request, so MCP clients can't connect until it
-is off. `npm run deploy:acqagent` is the deploy for the hosted copy at `mcp.acqagent.ai`.
+Later deploys leave the domain attached. Deploying with a custom domain turns the workers.dev URL
+off, and `preview_urls` is off in `wrangler.jsonc`, so all traffic goes through the zone, where
+WAF rules apply. Zone security settings apply to the custom domain: Bot Fight Mode on the Free plan
+challenges every non-browser request, so MCP clients can't connect until it is off.
+`npm run deploy:acqagent` is the deploy for the hosted copy at `mcp.acqagent.ai`.
 
-### 8. OpenAI plugin directory (optional)
+### 11. OpenAI plugin directory (optional)
 
 OpenAI verifies that you control the MCP server's domain by fetching a token from
 `/.well-known/openai-apps-challenge`. Copy the token from the submission portal, then:
@@ -187,6 +252,10 @@ The Worker serves it as plain text; without the secret that path returns 404. Th
 accepts servers with no authentication or OAuth, not bearer tokens, so delete `MCP_AUTH_TOKEN`
 (`npx wrangler secret delete MCP_AUTH_TOKEN`) before connecting the server in the portal. The
 package for the hosted copy's listing is in [`openai-plugin/`](openai-plugin/readme.md).
+
+OpenAI's documentation doesn't say which addresses its review uses, so keep the allowlist off
+until the listing is approved. Once it's on, setting `MCP_AUTH_TOKEN` again lets your own local
+clients in without affecting ChatGPT.
 
 ## Connect a client
 

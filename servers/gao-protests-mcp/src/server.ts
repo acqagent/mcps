@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { CfWorkerJsonSchemaValidator } from "@modelcontextprotocol/sdk/validation/cfworker";
 import { z } from "zod";
+import { takeToolCall } from "./allowance";
 import { RECORD_TYPES, VEHICLES } from "./filters";
 import { DataStore, DataUnavailableError } from "./store";
 import {
@@ -78,6 +79,11 @@ export function createServer(env: Env): McpServer {
     store: new DataStore(env.GAO_DATA, env.DATA_VERSION || DEFAULT_DATA_VERSION),
     ai: env.AI,
   };
+  // Every valid tool call counts toward the shared allowance; past it, the tool does no work.
+  const call = async (fn: () => Promise<unknown>): Promise<CallToolResult> => {
+    const usedUp = await takeToolCall(env);
+    return usedUp ? fail(usedUp) : run(fn);
+  };
   const server = new McpServer(
     { name: "gao-protests", title: "GAO Bid Protest Decisions", version: VERSION },
     { instructions: INSTRUCTIONS, jsonSchemaValidator: new CfWorkerJsonSchemaValidator() },
@@ -93,13 +99,13 @@ export function createServer(env: Env): McpServer {
         "realism'). Returns the closest decisions with similarity score, date, agency, outcome_assessed, " +
         "a one-sentence core issue, summary and issues. Optional filters narrow the corpus before ranking.",
       inputSchema: {
-        query: z.string().min(3).max(2000).describe("What to look for, in plain language."),
+        query: z.string().min(3).max(500).describe("What to look for, in plain language (up to 500 characters)."),
         limit: z.number().int().min(1).max(25).optional().describe("Number of results (default 10)."),
         ...corpusFilters,
       },
       annotations: { title: "Search Decisions", ...READ_ONLY },
     },
-    async (args) => run(() => searchDecisions(ctx, args)),
+    async (args) => call(() => searchDecisions(ctx, args)),
   );
 
   server.registerTool(
@@ -114,7 +120,7 @@ export function createServer(env: Env): McpServer {
       inputSchema: { b_number: bNumber },
       annotations: { title: "Get Decision", ...READ_ONLY },
     },
-    async (args) => run(() => getDecision(ctx, args)),
+    async (args) => call(() => getDecision(ctx, args)),
   );
 
   server.registerTool(
@@ -142,7 +148,7 @@ export function createServer(env: Env): McpServer {
       },
       annotations: { title: "Find Similar Decisions", ...READ_ONLY },
     },
-    async (args) => run(() => findSimilarDecisions(ctx, args)),
+    async (args) => call(() => findSimilarDecisions(ctx, args)),
   );
 
   server.registerTool(
@@ -163,7 +169,7 @@ export function createServer(env: Env): McpServer {
       },
       annotations: { title: "Get Similarity Synopsis", ...READ_ONLY },
     },
-    async (args) => run(() => getSimilaritySynopsis(ctx, args)),
+    async (args) => call(() => getSimilaritySynopsis(ctx, args)),
   );
 
   server.registerTool(
@@ -176,7 +182,7 @@ export function createServer(env: Env): McpServer {
       inputSchema: {},
       annotations: { title: "Corpus Info", ...READ_ONLY },
     },
-    async () => run(() => corpusInfo(ctx)),
+    async () => call(() => corpusInfo(ctx)),
   );
 
   return server;

@@ -1,13 +1,19 @@
 // Worker entry point: a stateless MCP server (Streamable HTTP, JSON responses) at /mcp.
 
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import { accessStatus, fromAllowedNetwork, refreshOpenAiRanges } from "./access";
+import { allowanceStatus } from "./allowance";
+import { checkOffSwitch, offSwitchStatus } from "./offswitch";
 import { createServer, DEFAULT_DATA_VERSION } from "./server";
 import { DataStore } from "./store";
 import type { Env } from "./types";
 import { VERSION } from "./version";
 
+export { UsageCounter } from "./allowance";
+
 const MCP_PATH = "/mcp";
 const OPENAI_CHALLENGE_PATH = "/.well-known/openai-apps-challenge";
+const NOT_ALLOWED = "This server accepts connections from ChatGPT and Claude. Add it there as an app or connector.";
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -45,6 +51,18 @@ function authorized(request: Request, url: URL, token: string | undefined): bool
   const bearer = /^Bearer\s+(.+)$/i.exec(header)?.[1]?.trim();
   const presented = bearer ?? url.searchParams.get("key") ?? "";
   return presented.length > 0 && safeEqual(presented, token);
+}
+
+/**
+ * Who may use /mcp. With ALLOWLIST off, anyone, or only token holders when MCP_AUTH_TOKEN is set.
+ * With ALLOWLIST "on", ChatGPT's and Claude's servers, plus token holders connecting from elsewhere.
+ */
+async function checkAccess(request: Request, url: URL, env: Env): Promise<"ok" | "unauthorized" | "forbidden"> {
+  const token = env.MCP_AUTH_TOKEN;
+  const hasToken = Boolean(token) && authorized(request, url, token);
+  if (env.ALLOWLIST !== "on") return !token || hasToken ? "ok" : "unauthorized";
+  if (hasToken) return "ok";
+  return (await fromAllowedNetwork(request.headers.get("CF-Connecting-IP"), env)) ? "ok" : "forbidden";
 }
 
 /** The client's IP address, with IPv6 cut to its /64: one client usually holds a whole /64. */
@@ -87,6 +105,16 @@ async function handleMcp(request: Request, env: Env): Promise<Response> {
   return withCors(await transport.handleRequest(request));
 }
 
+/** A /health section, or an error note in its place, so one failing part doesn't fail the whole check. */
+async function reported<T>(name: string, read: () => Promise<T>): Promise<T | { error: string }> {
+  try {
+    return await read();
+  } catch (err) {
+    console.error(`health: ${name} failed`, err);
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 async function handleHealth(env: Env): Promise<Response> {
   const store = new DataStore(env.GAO_DATA, env.DATA_VERSION || DEFAULT_DATA_VERSION);
   try {
@@ -98,6 +126,9 @@ async function handleHealth(env: Env): Promise<Response> {
       built_at: manifest.built_at,
       decisions: manifest.records,
       search: Boolean(manifest.vectors) && Boolean(env.AI),
+      tool_calls: await reported("allowance", () => allowanceStatus(env)),
+      access: await reported("access", () => accessStatus(env)),
+      off_switch: await reported("off switch", () => offSwitchStatus(env)),
     });
   } catch (err) {
     return json({ ok: false, version: VERSION, error: err instanceof Error ? err.message : String(err) }, 503);
@@ -124,12 +155,16 @@ export default {
           { "Retry-After": "60" },
         );
       }
-      if (!authorized(request, url, env.MCP_AUTH_TOKEN)) {
+      const access = await checkAccess(request, url, env);
+      if (access === "unauthorized") {
         return json(
           { jsonrpc: "2.0", error: { code: -32001, message: "Unauthorized" }, id: null },
           401,
           { "WWW-Authenticate": 'Bearer realm="gao-protests-mcp"' },
         );
+      }
+      if (access === "forbidden") {
+        return json({ jsonrpc: "2.0", error: { code: -32003, message: NOT_ALLOWED }, id: null }, 403);
       }
       return handleMcp(request, env);
     }
@@ -145,5 +180,12 @@ export default {
       });
     }
     return json({ error: "Not found", mcp_endpoint: `${url.origin}${MCP_PATH}` }, 404);
+  },
+
+  /** Hourly ("triggers" in wrangler.jsonc): refresh OpenAI's IP ranges and run the off switch check. */
+  async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
+    const [ranges, offSwitch] = await Promise.allSettled([refreshOpenAiRanges(env), checkOffSwitch(env)]);
+    if (ranges.status === "rejected") console.error("refreshing OpenAI's IP ranges failed", ranges.reason);
+    if (offSwitch.status === "rejected") console.error("off switch check failed", offSwitch.reason);
   },
 } satisfies ExportedHandler<Env>;
