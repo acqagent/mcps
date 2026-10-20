@@ -29,6 +29,10 @@
   "durable_objects": { "bindings": [{ "name": "USAGE", "class_name": "UsageCounter" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["UsageCounter"] }],
 
+  // Stops any request after 2 seconds of CPU time, so a runaway request can't run up the bill.
+  // The slowest calls measured on the hosted copy, cold starts included, took about 0.33 seconds.
+  "limits": { "cpu_ms": 2000 },
+
   // Hourly: refresh OpenAI's IP ranges for the allowlist, and run the off switch check.
   "triggers": { "crons": ["7 * * * *"] },
 

@@ -14,6 +14,8 @@
   custom rule that blocks the server's hostname.
 - An hourly cron trigger runs the list refresh and the off switch check.
 - `search_decisions` queries are limited to 500 characters, down from 2,000.
+- Requests stop after 2 seconds of CPU time (`limits.cpu_ms`), down from Cloudflare's default
+  of 30. The slowest calls measured on the hosted copy took about 0.33 seconds.
 - `/health` also reports the allowlist and off switch status.
 - `workers_dev` is no longer set, so deploying with a custom domain turns the workers.dev URL off,
   and `preview_urls` is off: zone WAF rules don't cover workers.dev.

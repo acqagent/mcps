@@ -170,6 +170,10 @@ count; connecting and listing tools don't. A Durable Object (`UsageCounter`) kee
 `/health` shows it under `tool_calls`. Change `DAILY_TOOL_CALLS` and `MONTHLY_TOOL_CALLS` to suit,
 or remove them for no allowance. If the counter fails, calls go through.
 
+`wrangler.jsonc` also stops any request after 2 seconds of CPU time (`limits.cpu_ms`), against
+Cloudflare's default of 30. The slowest calls measured on the hosted copy, including the first
+calls after a deploy, took about 0.33 seconds, so real requests stay well under it.
+
 ### 8. Allowlist (optional)
 
 Set `"ALLOWLIST": "on"` in `wrangler.jsonc` to accept `/mcp` requests only from the servers that
