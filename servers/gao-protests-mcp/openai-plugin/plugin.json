@@ -1,6 +1,6 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
-  "name": "acqagent-protest-search",
+  "name": "bid-protest-nexus",
   "version": "1.0.0",
   "description": "Search and compare GAO bid protest decisions by fact pattern, B-number, outcome, agency and year.",
   "author": {
@@ -15,7 +15,7 @@
   "extensions": {
     "com.openai": {
       "interface": {
-        "displayName": "AcqAgent Protest Search",
+        "displayName": "Bid Protest Nexus",
         "shortDescription": "Search GAO bid protest rulings",
         "longDescription": "Search and compare more than 29,000 GAO bid protest decisions, from 1925 to 2026, without leaving the conversation.\n\nDescribe an issue or fact pattern in plain language and get the closest decisions, each with its B-number, date, agency, outcome and a short summary. Open any decision by B-number for its issues, reasoning, why GAO ruled the way it did, key points and a link to the decision on gao.gov. Find the decisions most like a given one, filtered by outcome, agency, year, contracting vehicle (IDIQ, task order, set-aside and others) or record type. Or read a stored comparison of a decision with its five closest matches: what they share, how they differ, and grounds to distinguish them.\n\nBuilt for contracting officers and specialists, small business advocates, protest counsel, and anyone preparing or answering a bid protest.\n\nGood to know:\n- Summaries, issues, key points and comparisons are model-generated from the decisions. The outcome is read from the decision text. Cite B-numbers and check key facts in the decision itself before relying on them.\n- Decisions before 1990 come from scanned text and can have errors in names and dates.\n- The tools only read. There is no account, and nothing you ask changes anything.\n- This is a research aid, not legal advice.\n\nAcqAgent is an independent, open-source project. It is not affiliated with or endorsed by the U.S. Government Accountability Office (GAO) or any other federal agency.",
         "developerName": "AcqAgent",

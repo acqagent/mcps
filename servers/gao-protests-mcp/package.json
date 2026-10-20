@@ -9,7 +9,7 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "deploy:acqagent": "wrangler deploy --domain mcp.acqagent.ai",
-    "plugin:zip": "mkdir -p dist && rm -f dist/acqagent-protest-search.zip && cd openai-plugin && zip -X -r ../dist/acqagent-protest-search.zip plugin.json mcp.json assets",
+    "plugin:zip": "mkdir -p dist && rm -f dist/bid-protest-nexus.zip && cd openai-plugin && zip -X -r ../dist/bid-protest-nexus.zip plugin.json mcp.json assets",
     "build": "wrangler deploy --dry-run --outdir dist",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

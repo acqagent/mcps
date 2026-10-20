@@ -13,7 +13,7 @@ needs.
 Build the ZIP from `servers/gao-protests-mcp`:
 
 ```bash
-npm run plugin:zip     # writes dist/acqagent-protest-search.zip
+npm run plugin:zip     # writes dist/bid-protest-nexus.zip
 ```
 
 `npm test` checks the package against the directory's submission limits (name, text lengths,
