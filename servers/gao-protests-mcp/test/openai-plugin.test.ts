@@ -107,5 +107,6 @@ describe("OpenAI plugin package", () => {
       expect(c.expected_behavior.length).toBeGreaterThan(0);
       for (const name of c.tools_triggered.split(/,\s*/)) expect(tools, name).toContain(name);
     }
+    expect(openai.review.demo_recording_url).toMatch(/^https:\/\//);
   });
 });
