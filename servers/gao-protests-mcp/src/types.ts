@@ -1,3 +1,5 @@
+import type { UsageCounter } from "./allowance";
+
 export interface Env {
   /** R2 bucket holding the bundle written by scripts/build_bundle.py. */
   GAO_DATA: R2Bucket;
@@ -7,6 +9,25 @@ export interface Env {
   DATA_VERSION?: string;
   /** When set, /mcp requires "Authorization: Bearer <token>" (or ?key=<token>). */
   MCP_AUTH_TOKEN?: string;
+  /** Per-client-IP request limit on /mcp ("ratelimits" in wrangler.jsonc). Unset: no limit. */
+  MCP_RATE_LIMITER?: RateLimit;
+  /** Served as plain text at /.well-known/openai-apps-challenge to verify the domain with OpenAI. */
+  OPENAI_APPS_CHALLENGE?: string;
+  /** "on": /mcp accepts only ChatGPT's and Claude's servers, plus clients sending MCP_AUTH_TOKEN. */
+  ALLOWLIST?: string;
+  /** Counts tool calls for the shared allowance ("durable_objects" in wrangler.jsonc). */
+  USAGE?: DurableObjectNamespace<UsageCounter>;
+  /** Shared allowance of tool calls per UTC day and month. Unset: no limit. */
+  DAILY_TOOL_CALLS?: string;
+  MONTHLY_TOOL_CALLS?: string;
+  /** Off switch: requests per month before the hourly check blocks the host in the zone's WAF. */
+  OFF_SWITCH_REQUESTS?: string;
+  /** API token with Account Analytics Read and Zone WAF Edit. The off switch is disarmed without it. */
+  OFF_SWITCH_API_TOKEN?: string;
+  OFF_SWITCH_ACCOUNT_ID?: string;
+  OFF_SWITCH_ZONE_ID?: string;
+  /** The hostname to block, for example mcp.example.com. */
+  OFF_SWITCH_HOST?: string;
 }
 
 /** [b_number, cosine similarity, date, outcome_assessed] */

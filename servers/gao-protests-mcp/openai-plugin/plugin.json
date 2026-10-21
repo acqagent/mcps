@@ -1,0 +1,96 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "bid-protest-nexus",
+  "version": "1.0.0",
+  "description": "Search and compare GAO bid protest decisions by fact pattern, B-number, outcome, agency and year.",
+  "author": {
+    "name": "AcqAgent",
+    "email": "acqagent.ai@gmail.com",
+    "url": "https://acqagent.ai"
+  },
+  "homepage": "https://acqagent.ai",
+  "repository": "https://github.com/acqagent/mcps",
+  "license": "MIT",
+  "keywords": ["GAO", "bid protest", "federal contracting", "procurement", "government contracts"],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Bid Protest Nexus",
+        "shortDescription": "Search GAO bid protest rulings",
+        "longDescription": "Search and compare more than 29,000 GAO bid protest decisions, from 1925 to 2026, without leaving the conversation.\n\nDescribe an issue or fact pattern in plain language and get the closest decisions, each with its B-number, date, agency, outcome and a short summary. Open any decision by B-number for its issues, reasoning, why GAO ruled the way it did, key points and a link to the decision on gao.gov. Find the decisions most like a given one, filtered by outcome, agency, year, contracting vehicle (IDIQ, task order, set-aside and others) or record type. Or read a stored comparison of a decision with its five closest matches: what they share, how they differ, and grounds to distinguish them.\n\nBuilt for contracting officers and specialists, small business advocates, protest counsel, and anyone preparing or answering a bid protest.\n\nGood to know:\n- Summaries, issues, key points and comparisons are model-generated from the decisions. The outcome is read from the decision text. Cite B-numbers and check key facts in the decision itself before relying on them.\n- Decisions before 1990 come from scanned text and can have errors in names and dates.\n- The tools only read. There is no account, and nothing you ask changes anything.\n- This is a research aid, not legal advice.\n\nAcqAgent is an independent, open-source project. It is not affiliated with or endorsed by the U.S. Government Accountability Office (GAO) or any other federal agency.",
+        "developerName": "AcqAgent",
+        "category": "Education & Research",
+        "capabilities": ["Search decisions", "Read decision analyses", "Compare similar decisions"],
+        "websiteURL": "https://acqagent.ai",
+        "supportURL": "https://acqagent.ai/support",
+        "privacyPolicyURL": "https://acqagent.ai/privacy",
+        "termsOfServiceURL": "https://acqagent.ai/terms",
+        "defaultPrompt": [
+          "Find GAO decisions where a bid was rejected because the bid bond was missing at bid opening.",
+          "Get B-420562 and explain why GAO denied the protest.",
+          "Which Navy small business set-aside protests has GAO sustained since 2018?"
+        ],
+        "brandColor": "#2251FF",
+        "brandColorDark": "#80C0F0",
+        "composerIcon": "./assets/icon.png",
+        "logo": "./assets/logo.png"
+      },
+      "review": {
+        "test_cases": {
+          "positive": [
+            {
+              "description": "Find decisions by fact pattern",
+              "prompt": "Find GAO decisions where a bid was rejected because the bid bond was missing at bid opening.",
+              "tools_triggered": "search_decisions",
+              "expected_behavior": "Lists the closest decisions with B-numbers, dates, agencies and outcomes, such as B-196997 (denied), where the protester claimed its bid bond was in the bid package."
+            },
+            {
+              "description": "Explain one decision",
+              "prompt": "Get B-420562 and explain why GAO denied the protest.",
+              "tools_triggered": "get_decision",
+              "expected_behavior": "Explains that GAO denied Marine Hydraulics International's protest of the Navy's small business set-aside of a delivery order under an unrestricted IDIQ contract because the agency's rule-of-two analysis was reasonable, and links to https://www.gao.gov/products/b-420562."
+            },
+            {
+              "description": "Find similar decisions with an outcome filter",
+              "prompt": "Find decisions similar to B-417297.2 that GAO sustained.",
+              "tools_triggered": "find_similar_decisions",
+              "expected_behavior": "Returns only sustained decisions, ranked by similarity to B-417297.2 (a CMS task order protest sustained in part), such as B-421290, each with its date and a one-line issue."
+            },
+            {
+              "description": "Compare a decision with its closest matches",
+              "prompt": "Compare B-420562 with its closest matches. What grounds could distinguish it?",
+              "tools_triggered": "get_similarity_synopsis",
+              "expected_behavior": "Summarizes the stored comparison: shared issues (set-aside discretion and the rule of two), differences such as B-400403 being sustained over unsupported market research, and grounds to distinguish B-420562."
+            },
+            {
+              "description": "Handle a decision that isn't in the corpus",
+              "prompt": "Get GAO decision B-999999.",
+              "tools_triggered": "get_decision",
+              "expected_behavior": "Says no decision was found for B-999999 and suggests checking the number or searching by topic, without inventing a decision."
+            }
+          ],
+          "negative": [
+            {
+              "description": "Unsupported filing",
+              "prompt": "File a bid protest with GAO for my company."
+            },
+            {
+              "description": "Unsupported change to the data",
+              "prompt": "Delete decision B-420562 from the database."
+            },
+            {
+              "description": "Protected material the corpus doesn't hold",
+              "prompt": "Show me the redacted source selection information from the protected version of B-420562."
+            }
+          ]
+        },
+        "demo_recording_url": "https://drive.google.com/file/d/13KisW7hwnZqznPrQFbriG3Zx2byvpyXg/view",
+        "commerce": false,
+        "commerce_description": "This plugin does not sell products or process payments."
+      },
+      "publication": {
+        "release_notes": "Initial release: search more than 29,000 GAO bid protest decisions by fact pattern, open a decision's analysis by B-number, find similar decisions with filters, and read stored comparisons with the closest matches."
+      }
+    }
+  }
+}

@@ -13,10 +13,39 @@
 
   "vars": {
     // R2 key prefix of the bundle to serve; matches build_bundle.py --data-version.
-    "DATA_VERSION": "v1"
+    "DATA_VERSION": "v1",
+    // Shared allowance of tool calls for all users together, per UTC day and month. Past it, tools
+    // answer "try again later" without doing any work. Remove either one for no limit on that period.
+    "DAILY_TOOL_CALLS": "20000",
+    "MONTHLY_TOOL_CALLS": "300000",
+    // "on" accepts /mcp only from ChatGPT's and Claude's servers, plus clients sending MCP_AUTH_TOKEN.
+    "ALLOWLIST": "off",
+    // Off switch: past this many requests in a UTC month, the hourly check blocks the server's host in
+    // the zone's WAF. It stays disarmed until the OFF_SWITCH_* secrets are set (see the readme).
+    "OFF_SWITCH_REQUESTS": "60000000"
   },
 
+  // Counts tool calls for the allowance above.
+  "durable_objects": { "bindings": [{ "name": "USAGE", "class_name": "UsageCounter" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["UsageCounter"] }],
+
+  // Stops any request after 2 seconds of CPU time, so a runaway request can't run up the bill.
+  // The slowest calls measured on the hosted copy, cold starts included, took about 0.33 seconds.
+  "limits": { "cpu_ms": 2000 },
+
+  // Hourly: refresh OpenAI's IP ranges for the allowlist, and run the off switch check.
+  "triggers": { "crons": ["7 * * * *"] },
+
+  // Per-client-IP limit on /mcp; requests over it get HTTP 429. period is 10 or 60 seconds, and
+  // namespace_id is any number unique within your Cloudflare account. Remove it for no limit.
+  "ratelimits": [{ "name": "MCP_RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 120, "period": 60 } }],
+
   // Optional: `wrangler secret put MCP_AUTH_TOKEN` to require a bearer token on /mcp.
+  // Optional: `wrangler secret put OPENAI_APPS_CHALLENGE` to verify the domain for OpenAI's plugin directory.
+
+  // No version preview URLs on workers.dev. The workers.dev URL itself is on unless the Worker has a
+  // route or custom domain, so `--domain` turns it off: zone WAF rules don't cover workers.dev.
+  "preview_urls": false,
 
   "observability": { "enabled": true }
 }

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import worker from "../src/index";
+import worker, { rateLimitKey } from "../src/index";
 import { VERSION } from "../src/version";
 import { MCP_HEADERS, SET_ASIDE_QUERY, callTool, makeEnv, rpc } from "./helpers";
 
@@ -129,6 +129,53 @@ describe("authentication", () => {
   });
 });
 
+describe("rate limiting", () => {
+  it("limits /mcp per client IP when MCP_RATE_LIMITER is bound", async () => {
+    const { env } = makeEnv();
+    const keys: string[] = [];
+    env.MCP_RATE_LIMITER = {
+      limit: async ({ key }: { key: string }) => {
+        keys.push(key);
+        return { success: keys.length <= 2 };
+      },
+    };
+    const ip = { "CF-Connecting-IP": "203.0.113.7" };
+    expect((await rpc(env, "tools/list", {}, { headers: ip })).status).toBe(200);
+    expect((await rpc(env, "tools/list", {}, { headers: ip })).status).toBe(200);
+    const limited = await rpc(env, "tools/list", {}, { headers: ip });
+    expect(limited.status).toBe(429);
+    expect(limited.response.headers.get("Retry-After")).toBe("60");
+    expect(limited.body.error.message).toMatch(/Too many requests/);
+    expect(keys).toEqual(["203.0.113.7", "203.0.113.7", "203.0.113.7"]);
+    expect((await worker.fetch(new Request("https://gao.example/health"), env)).status).toBe(200);
+  });
+
+  it("keys IPv4 by address and IPv6 by /64", () => {
+    expect(rateLimitKey("203.0.113.7")).toBe("203.0.113.7");
+    expect(rateLimitKey("2600:4040:2945:bd00:8bdc:9cd2:ce84:34f7")).toBe("2600:4040:2945:bd00::/64");
+    expect(rateLimitKey("2001:db8::1")).toBe("2001:db8:0:0::/64");
+    expect(rateLimitKey("2001:db8:1:2::")).toBe("2001:db8:1:2::/64");
+    expect(rateLimitKey("::1")).toBe("0:0:0:0::/64");
+    expect(rateLimitKey(null)).toBe("unknown");
+  });
+
+  it("checks the limit before the token", async () => {
+    const { env } = makeEnv({ token: "s3cret-token" });
+    env.MCP_RATE_LIMITER = { limit: async () => ({ success: false }) };
+    expect((await rpc(env, "tools/list")).status).toBe(429);
+  });
+
+  it("lets requests through if the limiter fails", async () => {
+    const { env } = makeEnv();
+    env.MCP_RATE_LIMITER = {
+      limit: async () => {
+        throw new Error("limiter down");
+      },
+    };
+    expect((await rpc(env, "tools/list")).status).toBe(200);
+  });
+});
+
 describe("other routes", () => {
   it("serves health from the manifest", async () => {
     const { env } = makeEnv();
@@ -138,6 +185,17 @@ describe("other routes", () => {
     const down = await worker.fetch(new Request("https://gao.example/health"), broken.env);
     expect(down.status).toBe(503);
     expect(await down.json()).toMatchObject({ ok: false });
+  });
+
+  it("serves the OpenAI domain challenge only when it is set", async () => {
+    const { env } = makeEnv({ token: "s3cret-token" });
+    const challenge = () => worker.fetch(new Request("https://gao.example/.well-known/openai-apps-challenge"), env);
+    expect((await challenge()).status).toBe(404);
+    env.OPENAI_APPS_CHALLENGE = " abc123-token\n";
+    const res = await challenge();
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toMatch(/^text\/plain/);
+    expect(await res.text()).toBe("abc123-token");
   });
 
   it("describes itself at / and 404s elsewhere", async () => {

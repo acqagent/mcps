@@ -1,7 +1,10 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { clearAccessCache } from "../src/access";
+import { clearAllowanceCache, UsageCounter } from "../src/allowance";
 import worker from "../src/index";
+import { clearOffSwitchCache } from "../src/offswitch";
 import { clearCaches, DataStore } from "../src/store";
 import type { ToolContext } from "../src/tools";
 import type { Env } from "../src/types";
@@ -19,6 +22,7 @@ type Override = string | Uint8Array | null;
 /** Minimal R2Bucket backed by test/fixtures/bundle. Overrides replace (or, with null, hide) objects. */
 export class FixtureBucket {
   readonly gets: string[] = [];
+  readonly puts: string[] = [];
 
   constructor(private readonly overrides: Record<string, Override> = {}) {}
 
@@ -40,6 +44,11 @@ export class FixtureBucket {
       text: async () => new TextDecoder().decode(data),
       arrayBuffer: async () => data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength),
     };
+  }
+
+  async put(key: string, value: string) {
+    this.puts.push(key);
+    this.overrides[key] = value;
   }
 }
 
@@ -75,8 +84,37 @@ export function fakeAi() {
   };
 }
 
+/** Durable Object storage in memory: the get and put that UsageCounter uses. */
+export class MemoryStorage {
+  readonly data = new Map<string, unknown>();
+
+  async get(keys: string[]) {
+    return new Map(keys.filter((k) => this.data.has(k)).map((k) => [k, this.data.get(k)]));
+  }
+
+  async put(entries: Record<string, unknown>) {
+    for (const [k, v] of Object.entries(entries)) this.data.set(k, v);
+  }
+}
+
+/** A USAGE namespace whose one counter runs in this process, with a count of calls to it. */
+export function fakeUsage() {
+  const storage = new MemoryStorage();
+  const counter = new UsageCounter({ storage } as unknown as DurableObjectState, {} as Env);
+  const calls = { take: 0, read: 0 };
+  const stub = {
+    take: (...args: Parameters<UsageCounter["take"]>) => (calls.take++, counter.take(...args)),
+    read: (...args: Parameters<UsageCounter["read"]>) => (calls.read++, counter.read(...args)),
+  };
+  const ns = { idFromName: () => "global", get: () => stub };
+  return { ns: ns as unknown as DurableObjectNamespace<UsageCounter>, storage, calls };
+}
+
 export function makeEnv(options: { overrides?: Record<string, Override>; ai?: boolean; token?: string } = {}) {
   clearCaches();
+  clearAccessCache();
+  clearAllowanceCache();
+  clearOffSwitchCache();
   const bucket = new FixtureBucket(options.overrides);
   const ai = fakeAi();
   const env: Env = {
